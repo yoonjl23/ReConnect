@@ -1,0 +1,1 @@
+regex:s/sk-[A-Za-z0-9_\-]{20,}/__REMOVED__/g
