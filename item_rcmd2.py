@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 # =========================================================
 refer = {
     "users": [
-        {"user_id": 101, "attachment_type": "불안형-2"},
-        {"user_id": 102, "attachment_type": "안정형-1"}
+        {"couple_id": 101, "attachment_type": "불안형-2"},
+        {"couple_id": 102, "attachment_type": "안정형-1"}
     ],
     "advice": [
         {"advice_id": 1, "advice_comment": "호흡 4-7-8로 긴장 완화 루틴을 시작해요.", "tags": ["호흡","즉시완화"]},
@@ -40,20 +40,20 @@ refer = {
 
 user_state = {
     "user_state_daily": [
-        {"user_id": 101, "day": "2025-09-12", "anxiety_score": 60, "avoidance_score": 57},
-        {"user_id": 101, "day": "2025-09-15", "anxiety_score": 55, "avoidance_score": 52}
+        {"couple_id": 101, "day": "2025-09-12", "anxiety_score": 60, "avoidance_score": 57},
+        {"couple_id": 101, "day": "2025-09-15", "anxiety_score": 55, "avoidance_score": 52}
     ],
     "user_feedback": [
-        {"user_id": 101, "advice_id": 2, "label": "good", "ts": "2025-09-10T09:10:00+09:00"},
-        {"user_id": 101, "advice_id": 5, "label": "good", "ts": "2025-09-11T20:40:00+09:00"},
-        {"user_id": 101, "advice_id": 3, "label": "bad",  "ts": "2025-09-12T08:20:00+09:00"}
+        {"couple_id": 101, "advice_id": 2, "label": "good", "ts": "2025-09-10T09:10:00+09:00"},
+        {"couple_id": 101, "advice_id": 5, "label": "good", "ts": "2025-09-11T20:40:00+09:00"},
+        {"couple_id": 101, "advice_id": 3, "label": "bad",  "ts": "2025-09-12T08:20:00+09:00"}
     ],
     "session_log": []
 }
 
 fr_json = {
     "fr_window": {
-        "user_id": 101,
+        "couple_id": 101,
         "from": "2025-08-10",
         "to": "2025-09-14",
         "user_advice_ids": [2,5,3,1],  # (= exposed/selected)
@@ -71,9 +71,9 @@ def build_interactions_from_feedback(user_state_json, good_val=5.0, bad_val=1.0)
     rows = []
     for fb in user_state_json.get("user_feedback", []):
         v = good_val if fb["label"] == "good" else bad_val
-        rows.append({"user_id": fb["user_id"], "item_id": fb["advice_id"], "value": v})
+        rows.append({"couple_id": fb["couple_id"], "item_id": fb["advice_id"], "value": v})
     if not rows:
-        return pd.DataFrame(columns=["user_id","item_id","value"])
+        return pd.DataFrame(columns=["couple_id","item_id","value"])
     return pd.DataFrame(rows)
 
 def build_item_vecs_from_refer(refer_json, ver="v1"):
@@ -121,9 +121,9 @@ item_meta = build_item_meta_from_refer(refer)
 # 유틸: 인덱스 매핑 재빌드
 def rebuild_indices():
     global uid2idx, iid2idx, idx2uid, idx2iid, num_users, num_items
-    user_ids = sorted(interactions["user_id"].unique().tolist())
+    couple_ids = sorted(interactions["couple_id"].unique().tolist())
     item_ids = sorted(list(item_vecs.keys()))
-    uid2idx = {u:i for i,u in enumerate(user_ids)}
+    uid2idx = {u:i for i,u in enumerate(couple_ids)}
     iid2idx = {it:i for i,it in enumerate(item_ids)}
     idx2uid = {i:u for u,i in uid2idx.items()}
     idx2iid = {i:it for it,i in iid2idx.items()}
@@ -145,7 +145,7 @@ def rebuild_matrices():
         item_sim = np.zeros((0,0))
         return
 
-    rows = interactions["user_id"].map(uid2idx).values
+    rows = interactions["couple_id"].map(uid2idx).values
     cols = interactions["item_id"].map(iid2idx).values
     vals = interactions["value"].astype(float).values
     R = csr_matrix((vals, (rows, cols)), shape=(num_users, num_items))
@@ -192,7 +192,7 @@ def map_feedback_to_value(label=None, rating=None, like=None):
     if like is False:  return 0.0
     return None
 
-recent_feedback = defaultdict(lambda: deque(maxlen=200))  # user_id -> [(item_id, value)]
+recent_feedback = defaultdict(lambda: deque(maxlen=200))  # couple_id -> [(item_id, value)]
 last_feedback_value = defaultdict(dict)
 
 def update_user_profile(uidx, iidx, value, alpha=0.25, beta=0.15):
@@ -206,7 +206,7 @@ def update_user_profile(uidx, iidx, value, alpha=0.25, beta=0.15):
     u_new /= (np.linalg.norm(u_new) + 1e-9)
     user_mat[uidx] = u_new
 
-def register_feedback(user_id, item_id, label=None, rating=None, like=None):
+def register_feedback(couple_id, item_id, label=None, rating=None, like=None):
     """good/bad(label) 또는 rating/like를 받아 상호작용 + 상태 갱신"""
     global interactions
     val01 = map_feedback_to_value(label=label, rating=rating, like=like)
@@ -214,39 +214,39 @@ def register_feedback(user_id, item_id, label=None, rating=None, like=None):
         return
 
     # 최근 피드백/마지막값 저장
-    recent_feedback[user_id].append((item_id, val01))
-    last_feedback_value[user_id][item_id] = val01
+    recent_feedback[couple_id].append((item_id, val01))
+    last_feedback_value[couple_id][item_id] = val01
 
     # interactions 갱신(1~5 스케일)
-    if user_id in uid2idx and item_id in iid2idx:
+    if couple_id in uid2idx and item_id in iid2idx:
         v5 = float(val01)*5.0
         interactions = pd.concat([
             interactions,
-            pd.DataFrame({"user_id":[user_id], "item_id":[item_id], "value":[v5]})
+            pd.DataFrame({"couple_id":[couple_id], "item_id":[item_id], "value":[v5]})
         ], ignore_index=True)
 
         # R, user_mat 업데이트 (간이)
-        uidx = uid2idx[user_id]; iidx = iid2idx[item_id]
+        uidx = uid2idx[couple_id]; iidx = iid2idx[item_id]
         # CSR 인플레이스 갱신 대신 간단 재빌드 경로를 사용
         rebuild_matrices()
         # 타이브레이커용 사용자 벡터 소폭 보정
         update_user_profile(uidx, iidx, val01)
 
-def filter_blocked_and_seen(user_id, scores, like_threshold=0.7, allow_resurface=True):
-    seen = set(interactions[interactions["user_id"]==user_id]["item_id"])
-    blocked = user_blacklist[user_id]
+def filter_blocked_and_seen(couple_id, scores, like_threshold=0.7, allow_resurface=True):
+    seen = set(interactions[interactions["couple_id"]==couple_id]["item_id"])
+    blocked = user_blacklist[couple_id]
     if allow_resurface:
-        liked = {iid for iid, v in last_feedback_value[user_id].items() if v >= like_threshold}
+        liked = {iid for iid, v in last_feedback_value[couple_id].items() if v >= like_threshold}
         seen -= liked
     for iid in (seen | blocked):
         if iid in iid2idx:
             scores[iid2idx[iid]] = -np.inf
 
-def rerank_with_feedback(user_id, rec_idx, base_scores, boost=0.15, penalty=0.20):
-    if user_id not in recent_feedback:
+def rerank_with_feedback(couple_id, rec_idx, base_scores, boost=0.15, penalty=0.20):
+    if couple_id not in recent_feedback:
         return base_scores
-    liked_items   = {iid for iid,val in recent_feedback[user_id] if val >= 0.7}
-    disliked_items= {iid for iid,val in recent_feedback[user_id] if val <= 0.3}
+    liked_items   = {iid for iid,val in recent_feedback[couple_id] if val >= 0.7}
+    disliked_items= {iid for iid,val in recent_feedback[couple_id] if val <= 0.3}
 
     # 태그 기반 가산/감산 (artist → tags로 대체)
     def tags(iid): return set(item_meta.get(iid,{}).get("tags", []))
@@ -340,9 +340,9 @@ def recommend_for_user(target_user, N=5, topk_item_neighbors=50, normalize_by_si
 # =========================================================
 # 4) IR/FR 래퍼(API 응답 형태로 반환)
 # =========================================================
-def get_latest_scores(user_id):
+def get_latest_scores(couple_id):
     """user_state_daily에서 가장 최근 점수 반환(없으면 None)"""
-    rows = [r for r in user_state.get("user_state_daily", []) if r["user_id"] == user_id]
+    rows = [r for r in user_state.get("user_state_daily", []) if r["couple_id"] == couple_id]
     if not rows:
         return None
     rows.sort(key=lambda r: r["day"])
@@ -370,9 +370,9 @@ def neighbors_for(advice_id, K=3):
             out.append({"advice_id": iid, "sim": round(s, 4)})
     return out
 
-def ir_top1(user_id):
+def ir_top1(couple_id):
     """IR Top-1 (현재 상태 기반)"""
-    recs = recommend_for_user(user_id, N=1)
+    recs = recommend_for_user(couple_id, N=1)
     if not recs:
         return None
     aid, _ = recs[0]
@@ -384,11 +384,11 @@ def ir_top1(user_id):
         "neighbors": neighbors_for(aid, K=3)
     }
 
-def fr_top1(user_id, window_days=36, mode="itemcf"):
+def fr_top1(couple_id, window_days=36, mode="itemcf"):
     """FR Top-1 (회고) — 1안(Item-CF) 우선"""
     # 여기서는 간단히: 최근 N일의 good/bad를 이미 interactions에 반영했다고 가정하고
     # recommend_for_user로 동일하게 뽑되, reason만 다르게 표기
-    recs = recommend_for_user(user_id, N=1)
+    recs = recommend_for_user(couple_id, N=1)
     if not recs:
         return None
     aid, _ = recs[0]
@@ -404,22 +404,21 @@ def fr_top1(user_id, window_days=36, mode="itemcf"):
 # 5) 데모
 # =========================================================
 if __name__ == "__main__":
-    # 대상 유저
     target_user = int(input("target user: "))
 
-    print("=== IR Top-1 (초기) ===")
-    print(ir_top1(target_user))
-
-    # 피드백: good/bad 라벨 지원
-    
-    while (True):
-        feedback = input("feedback: ")
-        if feedback == "good":
-            break
-        print(f"\n[피드백 등록] user={target_user}, advice=4, label={feedback}")
-        register_feedback(user_id=target_user, item_id=4, label=feedback)
-        print("=== IR Top-1 (피드백 반영 후) ===")
+    for _ in range(36):
+        print("=== IR Top-1 (초기) ===")
         print(ir_top1(target_user))
+
+        # feedback이 'good'이면 while만 종료하고, for는 다음 회차로 진행
+        while True:
+            feedback = input("feedback: ").strip().lower()
+            if feedback == "good":
+                break  # <-- while만 종료
+            print(f"\n[피드백 등록] user={target_user}, advice=4, label={feedback}")
+            register_feedback(couple_id=target_user, item_id=4, label=feedback)
+            print("=== IR Top-1 (피드백 반영 후) ===")
+            print(ir_top1(target_user))
 
     # FR(1안) 호출
     print("\n=== FR Top-1 (36일 회고, 1안: Item-CF) ===")
