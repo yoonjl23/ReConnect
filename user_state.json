@@ -1,0 +1,22 @@
+{
+  "user_state_daily": [
+    {"couple_id": 101, "day": "2025-08-12", "anxiety_score": 62, "avoidance_score": 58},
+    {"couple_id": 101, "day": "2025-09-15", "anxiety_score": 55, "avoidance_score": 52}
+  ],
+  "user_feedback": [
+    {"couple_id": 101, "advice_id": 2, "label": "good", "ts": "2025-09-10T09:10:00+09:00"},
+    {"couple_id": 101, "advice_id": 5, "label": "good", "ts": "2025-09-11T20:40:00+09:00"},
+    {"couple_id": 101, "advice_id": 3, "label": "bad",  "ts": "2025-09-12T08:20:00+09:00"}
+  ],
+  "session_log": [
+    {
+      "session_id": "IR-101-001",
+      "couple_id": 101,
+      "phase": "IR",
+      "input": {"attachment_type": "2", "qna": {"sleep":"나쁨","집중":"보통"}},
+      "output_advice_id": 2,
+      "meta": {"reason": "최근 불안↑ 기록행동 선호"},
+      "ts": "2025-09-12T08:21:00+09:00"
+    }
+  ]
+}

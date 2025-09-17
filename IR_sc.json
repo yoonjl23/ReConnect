@@ -1,0 +1,74 @@
+{
+  "meta": {
+    "schema_version": "1.0.0",
+    "engine_id": "ecrr-llmscore-v2.3.1",
+    "cohort_version": "ecrr-cohort-2025q3-k=10k",
+    "item_id": 5,
+    "idempotency_key": "sha256:...",
+    "created_at": "2025-09-12T03:20:00Z"
+  },
+  "question": {
+    "text": "I worry about being abandoned.", 
+    "dimension": "anxiety",
+    "is_reverse": false
+  },
+  "partners": {
+    "A": {
+      "raw_answers": { "text": "I often fear my partner will leave when we fight." },
+      "nlp": { "length": 64, "negation_rate": 0.00, "toxicity": 0.02, "reliability": 0.82 },
+      "scores": {
+        "pred_raw": 6.3,
+        "calibrated": 6.1,
+        "smoothed": 4.12,
+        "blend": 4.79,       // α·survey_mean + (1−α)·smoothed
+        "survey_mean_dim": 3.9
+      },
+      "quality": {
+        "data_quality_flags": ["ok"],
+        "weight_factor": 1.0
+      },
+      "state_next": { "S_anxiety": 4.12, "S_avoidance": 3.51 },
+      "label": "Anxious",
+      "distribution_pct": { "Secure": 12.0, "Anxious": 63.0, "Avoidant": 8.0, "Disorganized": 17.0 },
+      "uncertainty": { "near_boundary": false, "epsilon": 0.10 }
+    },
+    "B": {
+      "raw_answers": { "text": "Not really; I feel stable in our bond." },
+      "nlp": { "length": 38, "negation_rate": 0.12, "toxicity": 0.00, "reliability": 0.76 },
+      "scores": {
+        "pred_raw": 2.2,
+        "calibrated": 2.5,
+        "smoothed": 3.12,
+        "blend": 3.54,
+        "survey_mean_dim": 3.8
+      },
+      "quality": {
+        "data_quality_flags": ["ok"],
+        "weight_factor": 1.0
+      },
+      "state_next": { "S_anxiety": 3.12, "S_avoidance": 3.60 },
+      "label": "Secure",
+      "distribution_pct": { "Secure": 61.0, "Anxious": 9.0, "Avoidant": 17.0, "Disorganized": 13.0 },
+      "uncertainty": { "near_boundary": true, "epsilon": 0.10 }
+    }
+  },
+  "couple_profile": {
+    "anxiety": { "A": 4.79, "B": 3.54 },
+    "avoidance": { "A": 3.51, "B": 3.60 },
+    "quadrant": "A:Anxious, B:Secure"
+  },
+  "charts": {
+    "sparklines": { "A": [3.9,4.1,4.0,4.3,4.8], "B": [3.8,3.6,3.5,3.5,3.5] }
+  },
+  "strengths": ["B expresses stable bond."],
+  "issues": ["A shows elevated abandonment fear."],
+  "advice": ["Use secure-base language and pre-commitment rituals."],
+  "audit": {
+    "ir_hash": "sha256:...",
+    "latency_ms": 812,
+    "cost_usd": 0.0042,
+    "request_id": "req_7f2...",
+    "nlp_hash": "sha256:...",
+    "pii_masked": true
+  }
+}

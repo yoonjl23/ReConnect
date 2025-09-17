@@ -1,0 +1,27 @@
+{
+  "users": [
+    {"couple_id": 101, "attachment_type": "2"},
+    {"couple_id": 102, "attachment_type": "1"}
+  ],
+  "advice": [
+    {"advice_id": 1, "advice_comment": "호흡 4-7-8로 긴장 완화 루틴을 시작해요.", "tags": ["호흡","즉시완화"]},
+    {"advice_id": 2, "advice_comment": "일과 걱정을 분리하는 '우려 다이어리'를 10분만 써봐요.", "tags": ["기록","인지"]},
+    {"advice_id": 3, "advice_comment": "중요도-긴급도 매트릭스로 오늘 할 일을 3개만 뽑아요.", "tags": ["우선순위","실행"]},
+    {"advice_id": 4, "advice_comment": "잠들기 1시간 전 스크린 오프, 수면 신호를 일정하게.", "tags": ["수면","위생"]},
+    {"advice_id": 5, "advice_comment": "감사 저널: 오늘 고마웠던 것 3가지를 적어봐요.", "tags": ["기록","정서"]}
+  ],
+  "advice_feature": [
+    {"advice_id": 1, "embed": [0.91,0.12,0.03,0.44], "ver": "v1"},
+    {"advice_id": 2, "embed": [0.62,0.77,0.11,0.09], "ver": "v1"},
+    {"advice_id": 3, "embed": [0.15,0.18,0.94,0.22], "ver": "v1"},
+    {"advice_id": 4, "embed": [0.71,0.09,0.21,0.83], "ver": "v1"},
+    {"advice_id": 5, "embed": [0.33,0.88,0.14,0.05], "ver": "v1"}
+  ],
+  "advice_sim": [
+    {"advice_id_a": 1, "advice_id_b": 4, "sim": 0.82},
+    {"advice_id_a": 2, "advice_id_b": 5, "sim": 0.86},
+    {"advice_id_a": 2, "advice_id_b": 3, "sim": 0.44},
+    {"advice_id_a": 1, "advice_id_b": 3, "sim": 0.31},
+    {"advice_id_a": 4, "advice_id_b": 5, "sim": 0.28}
+  ]
+}
