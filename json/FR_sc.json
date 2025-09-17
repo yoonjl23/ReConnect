@@ -17,7 +17,6 @@
     "items": [
       { "item_id": 1, "A": { "blend": 4.2 }, "B": { "blend": 3.5 } },
       { "item_id": 2, "A": { "blend": 4.6 }, "B": { "blend": 3.6 } }
-      // ... up to 36
     ]
   },
   "profiles": {

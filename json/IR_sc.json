@@ -20,7 +20,7 @@
         "pred_raw": 6.3,
         "calibrated": 6.1,
         "smoothed": 4.12,
-        "blend": 4.79,       // α·survey_mean + (1−α)·smoothed
+        "blend": 4.79,     
         "survey_mean_dim": 3.9
       },
       "quality": {
