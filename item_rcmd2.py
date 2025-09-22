@@ -367,6 +367,52 @@ def safe_neighbors_for(item_id, K=3):
             break
     return out
 
+def _score_vector_for_uid(user_id, topk_item_neighbors=None, normalize_by_sim_sum=True):
+    """
+    user_id에 대해 ItemCF 점수 벡터(길이 = num_items)를 계산해서 반환.
+    필터(본 항목/블랙리스트/나쁨)는 -inf로 마스킹한다.
+    반환: (scores: np.ndarray[float], valid_idx: np.ndarray[int])
+    """
+    if user_id not in uid2idx or item_sim.size == 0:
+        return np.array([]), np.array([], dtype=int)
+
+    uidx = uid2idx[user_id]
+    user_row = R.getrow(uidx).toarray().ravel()  # [I]
+    seen_idx = np.where(user_row > 0)[0]
+    if seen_idx.size == 0:
+        return np.array([]), np.array([], dtype=int)
+
+    weights_seen = user_row[seen_idx]            # 1~5
+    sims_seen = item_sim[seen_idx]               # [S x I]
+
+    if sims_seen.shape[1] == 0:
+        return np.array([]), np.array([], dtype=int)
+
+    # 필요 시 top-k 이웃 제한
+    if topk_item_neighbors is not None and topk_item_neighbors < num_items:
+        I = sims_seen.shape[1]
+        if I == 0:
+            return np.array([]), np.array([], dtype=int)
+        k = max(1, min(topk_item_neighbors, I))
+        if I > 1 and k < I:
+            sims_seen_sparse = np.zeros_like(sims_seen)
+            part = np.argpartition(-sims_seen, k-1, axis=1)[:, :k]
+            rows = np.arange(sims_seen.shape[0])[:, None]
+            sims_seen_sparse[rows, part] = sims_seen[rows, part]
+            sims_seen = sims_seen_sparse
+
+    scores = weights_seen @ sims_seen  # [I]
+    if normalize_by_sim_sum:
+        denom = np.abs(sims_seen).sum(axis=0) + 1e-9
+        scores = scores / denom
+
+    # 필터 적용
+    filter_blocked_and_seen(user_id, scores)
+
+    valid_idx = np.where(np.isfinite(scores) & (scores > -np.inf))[0]
+    return scores, valid_idx
+
+
 # neighbors_for 별칭
 neighbors_for = safe_neighbors_for
 
@@ -435,69 +481,129 @@ def ir_top1_AB(couple_id):
         "B": ir_top1_member(couple_id, "B"),
     }
 
+def ir_top1_couple(couple_id, topk_item_neighbors=None, wA=0.5, wB=0.5):
+    """
+    A와 B의 애착 유형 및 최근 피드백을 모두 반영하여 '하루 1개' 합의 추천을 반환.
+    반환: {'item_id', 'advice_comment', 'reason', 'neighbors'}
+    """
+    cid = normalize_cid(couple_id)
+    uidA = user_key(cid, "A")
+    uidB = user_key(cid, "B")
+
+    # 각자 점수 벡터
+    sA, validA = _score_vector_for_uid(uidA, topk_item_neighbors=topk_item_neighbors)
+    sB, validB = _score_vector_for_uid(uidB, topk_item_neighbors=topk_item_neighbors)
+
+    # 둘 다 콜드스타트면 빈값
+    if sA.size == 0 and sB.size == 0:
+        return None
+
+    # 공통 유효 인덱스(둘 중 하나라도 후보에 포함된 것)
+    valid = np.unique(np.concatenate([validA, validB])) if sA.size and sB.size else (validA if sB.size == 0 else validB)
+
+    # 기본 스코어 백터 준비
+    baseA = sA.copy() if sA.size else np.full(num_items, -np.inf, dtype=float)
+    baseB = sB.copy() if sB.size else np.full(num_items, -np.inf, dtype=float)
+
+    # 인덱스 → 아이템ID 배열
+    idx_arr = np.arange(num_items, dtype=int)
+
+    # 애착유형 가중
+    mA = user_info.get(cid, {}).get("A", 0)
+    mB = user_info.get(cid, {}).get("B", 0)
+    if mA and baseA.size:
+        baseA_valid = baseA[valid]
+        baseA[valid] = apply_member_bias(valid, baseA_valid, mA, boost=0.10)
+    if mB and baseB.size:
+        baseB_valid = baseB[valid]
+        baseB[valid] = apply_member_bias(valid, baseB_valid, mB, boost=0.10)
+
+    # 피드백 리랭킹
+    if baseA.size:
+        baseA[valid] = rerank_with_feedback(uidA, valid, baseA[valid], boost=0.20, penalty=0.25)
+    if baseB.size:
+        baseB[valid] = rerank_with_feedback(uidB, valid, baseB[valid], boost=0.20, penalty=0.25)
+
+    # 합성 점수 (동일 가중 평균)
+    combo = np.zeros(num_items, dtype=float) + (-np.inf)
+    # 둘 다 점수 있는 곳: 평균, 한쪽만 있으면 그쪽 점수 사용
+    both_mask = np.isfinite(baseA) & np.isfinite(baseB)
+    onlyA = np.isfinite(baseA) & ~np.isfinite(baseB)
+    onlyB = ~np.isfinite(baseA) & np.isfinite(baseB)
+    combo[both_mask] = wA * baseA[both_mask] + wB * baseB[both_mask]
+    combo[onlyA] = baseA[onlyA]
+    combo[onlyB] = baseB[onlyB]
+
+    # 최종 상위 1개
+    valid_final = np.where(np.isfinite(combo) & (combo > -np.inf))[0]
+    if valid_final.size == 0:
+        return None
+    top = valid_final[np.argmax(combo[valid_final])]
+    aid = idx2iid[top]
+
+    return {
+        "item_id": aid,
+        "advice_comment": advice_text(aid),
+        "reason": "A/B 애착·피드백 통합 + ItemCF",
+        "neighbors": neighbors_for(aid, K=3),
+    }
+
+
 # =========================================================
 # 5) 데모
 # =========================================================
 if __name__ == "__main__":
-    # 문자열/숫자 모두 입력 가능 (내부적으로 문자열 키로 통일)
     target_user = input("target couple_id (예: cpl_abc123 또는 101): ").strip()
     if not target_user:
         raise SystemExit("유효한 couple_id를 입력하세요. 예: cpl_abc123")
 
     for turn in range(36):
-        print(f"\n=== IR Top-1 (회차 {turn+1}) ===")
-        ab = ir_top1_AB(target_user)  # A와 B 동시에 추천
+        print(f"\n=== IR Top-1 (회차 {turn+1}) — A/B 통합 추천 ===")
+        rec = ir_top1_couple(target_user)
+        if not rec:
+            print("추천 불가(데이터 부족). 최소 한 명의 초기 피드백이 필요합니다.")
+            break
 
-        a_rec = ab.get("A")
-        b_rec = ab.get("B")
-
-        print("A추천:", a_rec)
-        print("B추천:", b_rec)
-        print("허용 입력 예시: 'A good', 'B bad', 'A bad, B good', 'next', 'quit'")
-
-        current_aid_A = a_rec["item_id"] if isinstance(a_rec, dict) else None
-        current_aid_B = b_rec["item_id"] if isinstance(b_rec, dict) else None
+        current_aid = rec["item_id"]
+        print("추천:", rec)
+        print("허용 입력 예시: 'A good', 'B bad', 'A good, B bad', 'next', 'quit'")
 
         while True:
             feedback = input("feedback [A/B good|bad ... | next | quit]: ").strip().lower()
             if feedback == "quit":
                 raise SystemExit(0)
             if feedback in ("next", "skip", ""):
-                # 이 회차 종료 → 다음 회차로
+                # 하루 종료 → 다음 날
                 break
 
-            # 한 줄에 여러 건: "A good, B bad" 처럼 쉼표로 구분
+            # 여러 건: "A good, B bad"
             commands = [c.strip() for c in feedback.split(",") if c.strip()]
+            got_bad = False
             for cmd in commands:
                 parts = cmd.split()
                 if len(parts) != 2 or parts[0] not in ("a","b") or parts[1] not in ("good","bad"):
-                    print("형식: 'A good, B bad' 또는 'next'"); 
+                    print("형식: 'A good, B bad' 또는 'next'")
                     continue
-
                 member, label = parts[0].upper(), parts[1]
-                target_aid = current_aid_A if member == "A" else current_aid_B
-                if target_aid is None:
-                    print(f"[{member}] 현재 추천이 없습니다.")
-                    continue
-
-                print(f"[피드백] couple={target_user}, member={member}, advice={target_aid}, label={label}")
-                register_feedback(couple_id=target_user, item_id=target_aid, label=label, member=member)
-
-                # 'good'은 같은 회차에서 재추천하지 않음. 'bad'만 즉시 재추천 + 안티 스턱.
+                print(f"[피드백] couple={target_user}, member={member}, advice={current_aid}, label={label}")
+                register_feedback(couple_id=target_user, item_id=current_aid, label=label, member=member)
                 if label == "bad":
-                    new_rec = ir_top1_member(target_user, member)
-                    if new_rec and new_rec["item_id"] == target_aid:
-                        user_blacklist[user_key(target_user, member)].add(target_aid)
-                        new_rec = ir_top1_member(target_user, member)
+                    got_bad = True
+                    # 멤버별 블랙리스트
+                    user_blacklist[user_key(target_user, member)].add(current_aid)
 
-                    if member == "A":
-                        current_aid_A = new_rec["item_id"] if new_rec else None
-                        if new_rec:
-                            print("A 재추천:", new_rec)
-                    else:
-                        current_aid_B = new_rec["item_id"] if new_rec else None
-                        if new_rec:
-                            print("B 재추천:", new_rec)
+            # 같은 날 즉시 재추천은 'bad'가 하나라도 있으면 1회만
+            if got_bad:
+                new_rec = ir_top1_couple(target_user)
+                if new_rec and new_rec["item_id"] == current_aid:
+                    # 동일 아이템이면 다양성 확보를 위해 이웃 폭 축소 시도
+                    new_rec = ir_top1_couple(target_user, topk_item_neighbors=max(5, num_items//20))
+                if new_rec:
+                    current_aid = new_rec["item_id"]
+                    print("재추천(통합):", new_rec)
+                else:
+                    print("재추천 불가(대체 후보 없음).")
+
 
     # FR(1안) 호출
     print("\n=== FR Top-1 (36일 회고, 1안: Item-CF) ===")
