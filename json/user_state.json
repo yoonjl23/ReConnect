@@ -1,7 +1,7 @@
 {
     "user_state_daily": [
-        {"couple_id": "cpl_abc123", "day": "2025-09-12", "anxiety_score": 60, "avoidance_score": 57},
-        {"couple_id": "cpl_abc123", "day": "2025-09-15", "anxiety_score": 55, "avoidance_score": 52}
+        {"couple_id": "cpl_abc123", "day": "2025-09-12", "a_anxiety_score": 60, "a_avoidance_score": 57, "b_anxiety_score": 60, "b_avoidance_score": 57},
+        {"couple_id": "cpl_abc123", "day": "2025-09-15", "a_anxiety_score": 55, "a_avoidance_score": 52, "b_anxiety_score": 60, "b_avoidance_score": 57}
     ],
     "user_feedback": [
         {"couple_id": "cpl_abc123", "member": "A", "item_id": 2, "label": "good", "ts": "..."},
